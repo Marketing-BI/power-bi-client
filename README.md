@@ -33,7 +33,7 @@ WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGE
 
 Prerequisites:
 
-- Node.js 16+ (recommended 18+)
+- Node.js 18+ (recommended 22+)
 - Access to Azure AD app with permissions to call Power BI REST API
 - Power BI workspace permissions
 

@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "es6",
     "module": "commonjs",
+    "moduleResolution": "node16",
     "rootDirs": ["./src"],
     "outDir": "./dist",
     "esModuleInterop": true,
@@ -10,10 +11,6 @@
     "emitDecoratorMetadata": true,
     "declaration": true
   },
-  "exclude": [
-    "node_modules", "dist", "src/**/*.spec.ts", "src/**/*.test.ts"
-  ],
-  "include": [
-    "src/**/*"
-  ]
+  "exclude": ["node_modules", "dist", "src/**/*.spec.ts", "src/**/*.test.ts"],
+  "include": ["src/**/*"]
 }
