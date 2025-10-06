@@ -21,7 +21,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: node:14.19.1-alpine
+      image: node:22
     steps:
       - uses: actions/checkout@v4
 
