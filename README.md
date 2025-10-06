@@ -22,12 +22,12 @@ WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGE
 
 ## 📄 Table of Contents
 
-- [📝 License](#📝-license)
-- [🚀 Quick start guide](#🚀-quick-start-guide)
+- [📝 License](#-license)
+- [🚀 Quick start guide](#-quick-start-guide)
   - [List of .env variables](#list-of-env-variables)
-- [💻 Contributing](#💻-contributing)
+- [💻 Contributing](#-contributing)
   - [Branch management](#branch-management)
-- [🪵 Changelog](#🪵-change-log)
+- [🪵 Changelog](#-change-log)
 
 ## 🚀 Quick start guide
 
