@@ -140,78 +140,111 @@ export class PowerBiService {
     }
   }
 
+  /**
+   * Imports a PBIX file to a Power BI workspace and configures it with the specified settings.
+   *
+   * This method performs the following operations:
+   * 1. Retrieves the target Power BI group/workspace
+   * 2. Copies users from the template group to the target workspace
+   * 3. Imports the PBIX file and waits for publishing to complete
+   * 4. Takes ownership of the created dataset
+   * 5. Updates dataset parameters and datasource credentials
+   * 6. Triggers a dataset refresh and waits for completion (up to 72 iterations with 10s intervals)
+   * 7. Optionally creates a refresh schedule if specified in the configuration
+   * 8. Retrieves all reports associated with the dataset
+   *
+   * @param groupId - The ID of the target Power BI workspace/group where the PBIX will be imported
+   * @param config - Configuration object containing:
+   *   - templateGroupId: ID of the source group to copy users from
+   *   - datasourceCredentials: Credentials for the datasource connection
+   *   - datasourceParams: Parameters for dataset configuration
+   *   - name: Name for the dataset/report
+   *   - scheduledTimes: Optional array of scheduled refresh times
+   *   - scheduledDays: Optional array of scheduled refresh days
+   *   - getTemplate(): Method that returns the PBIX file as a Buffer
+   *
+   * @returns A Promise that resolves to a PBIClientInitResultType object containing:
+   *   - workspaceId: The ID of the workspace
+   *   - dataRefreshed: Boolean indicating if the dataset was successfully refreshed
+   *   - name: The name of the workspace
+   *   - datasetId: The ID of the created dataset
+   *   - datasourceId: The ID of the datasource
+   *   - reports: Array of reports associated with the dataset
+   *
+   * @throws {PowerBiError} When groupId or datasourceCredentials are missing (MISSING_INIT_CONFIGURATION)
+   * @throws {PowerBiError} When any unexpected error occurs during the import process (UNEXPECTED_CREATION_ERROR)
+   */
   public async importPbixToWorkspace(groupId: string, config: PowerBiConfigDto): Promise<PBIClientInitResultType> {
     logger.info(`Import PBIX to Workspace starts for groupId: ${groupId}`);
 
-    if (groupId && config.datasourceCredentials) {
-      const pbiGroup: PBIGroup = await this.getGroup(groupId);
-      try {
-        const addedUsers: Set<string> = await this.copyUsersFromGroup(config.templateGroupId, pbiGroup.id);
-
-        const data: Buffer = await config.getTemplate();
-        // dataset name matches the name of pbix report
-        const datasetName: string = config.name;
-        let importData: Record<string, any> = await this.importInGroup(pbiGroup.id, data, datasetName);
-        do {
-          logger.info('%s - Import with id: `%s` in group: `%s` still publishing...', importData.id, pbiGroup.id);
-          await new Promise((r) => setTimeout(r, 2000));
-          importData = await this.getImportInGroup(pbiGroup.id, importData.id);
-        } while (importData.importState === 'Publishing');
-        const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id);
-        const datasetId: string = datasets.find((dataset) => dataset.name === datasetName).id;
-        //Take ownership
-        await this.datasetTakeOver(pbiGroup.id, datasetId);
-
-        logger.info('new params: %s', JSON.stringify(config.datasourceParams));
-        await this.datasetUpdateParameters(pbiGroup.id, datasetId, config.datasourceParams);
-        // update datasource credentials
-        const datasource = (await this.listDatasourcesInGroup(pbiGroup.id, datasetId))[0];
-
-        await this.gatewayDatasourceUpdate(datasource.gatewayId, datasource.datasourceId, config.datasourceCredentials);
-        await this.datasetRefresh(pbiGroup.id, datasetId);
-        let counter = 0;
-        let refreshed: boolean;
-        do {
-          counter++;
-          logger.info('%s - Dataset with id: `%s` in workspace: `%s` still refreshing...', datasetId, pbiGroup.id);
-          await new Promise((r) => setTimeout(r, 10000));
-          const refreshes = await this.getDatasetRefreshes(pbiGroup.id, datasetId);
-          refreshed = this.allRefreshesInFinalState(refreshes);
-        } while (counter < 72 && !refreshed);
-
-        if (config.scheduledTimes) {
-          // Provides Creation of schedule for dataset
-          await this.datasetCreateRefreshSchedule(pbiGroup.id, datasetId, config.scheduledTimes, config.scheduledDays);
-        }
-        // Loads all Reports in a group
-        const reports: Array<PBIReport> = await this.listReportsInGroupForDataset(pbiGroup.id, datasetId);
-
-        const infoMsg = {
-          groupId: pbiGroup.id,
-          groupName: pbiGroup.name,
-          datasetId: datasetId,
-          gatewayId: datasource.gatewayId,
-          datasourceId: datasource.datasourceId,
-          assignedUsersCount: addedUsers.size,
-          reportCount: reports.length,
-        };
-
-        logger.info(`Import PBIX to Workspace ends with result: ${JSON.stringify(infoMsg)}`);
-
-        return {
-          workspaceId: pbiGroup.id,
-          dataRefreshed: refreshed,
-          name: pbiGroup.name,
-          datasetId: datasetId,
-          datasourceId: datasource.datasourceId,
-          reports: await Promise.all(reports.map((report) => this.reportConvertor(pbiGroup.id, report))),
-        };
-      } catch (e) {
-        logger.error(e);
-        throw new PowerBiError(PowerBiError.ERROR_MESSAGES.UNEXPECTED_CREATION_ERROR);
-      }
-    } else {
+    if (!(groupId && config.datasourceCredentials)) {
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_INIT_CONFIGURATION);
+    }
+    const pbiGroup: PBIGroup = await this.getGroup(groupId);
+    try {
+      const addedUsers: Set<string> = await this.copyUsersFromGroup(config.templateGroupId, pbiGroup.id);
+
+      const data: Buffer = await config.getTemplate();
+      // dataset name matches the name of pbix report
+      const datasetName: string = config.name;
+      let importData: Record<string, any> = await this.importInGroup(pbiGroup.id, data, datasetName);
+      do {
+        logger.info('%s - Import with id: `%s` in group: `%s` still publishing...', importData.id, pbiGroup.id);
+        await new Promise((r) => setTimeout(r, 2000));
+        importData = await this.getImportInGroup(pbiGroup.id, importData.id);
+      } while (importData.importState === 'Publishing');
+      const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id);
+      const datasetId: string = datasets.find((dataset) => dataset.name === datasetName).id;
+      //Take ownership
+      await this.datasetTakeOver(pbiGroup.id, datasetId);
+
+      logger.info('new params: %s', JSON.stringify(config.datasourceParams));
+      await this.datasetUpdateParameters(pbiGroup.id, datasetId, config.datasourceParams);
+      // update datasource credentials
+      const datasource = (await this.listDatasourcesInGroup(pbiGroup.id, datasetId))[0];
+
+      await this.gatewayDatasourceUpdate(datasource.gatewayId, datasource.datasourceId, config.datasourceCredentials);
+      await this.datasetRefresh(pbiGroup.id, datasetId);
+      let counter = 0;
+      let refreshed: boolean;
+      do {
+        counter++;
+        logger.info('%s - Dataset with id: `%s` in workspace: `%s` still refreshing...', datasetId, pbiGroup.id);
+        await new Promise((r) => setTimeout(r, 10000));
+        const refreshes = await this.getDatasetRefreshes(pbiGroup.id, datasetId);
+        refreshed = this.allRefreshesInFinalState(refreshes);
+      } while (counter < 72 && !refreshed);
+
+      if (config.scheduledTimes) {
+        // Provides Creation of schedule for dataset
+        await this.datasetCreateRefreshSchedule(pbiGroup.id, datasetId, config.scheduledTimes, config.scheduledDays);
+      }
+      // Loads all Reports in a group
+      const reports: Array<PBIReport> = await this.listReportsInGroupForDataset(pbiGroup.id, datasetId);
+
+      const infoMsg = {
+        groupId: pbiGroup.id,
+        groupName: pbiGroup.name,
+        datasetId: datasetId,
+        gatewayId: datasource.gatewayId,
+        datasourceId: datasource.datasourceId,
+        assignedUsersCount: addedUsers.size,
+        reportCount: reports.length,
+      };
+
+      logger.info(`Import PBIX to Workspace ends with result: ${JSON.stringify(infoMsg)}`);
+
+      return {
+        workspaceId: pbiGroup.id,
+        dataRefreshed: refreshed,
+        name: pbiGroup.name,
+        datasetId: datasetId,
+        datasourceId: datasource.datasourceId,
+        reports: await Promise.all(reports.map((report) => this.reportConvertor(pbiGroup.id, report))),
+      };
+    } catch (e) {
+      logger.error(e);
+      throw new PowerBiError(PowerBiError.ERROR_MESSAGES.UNEXPECTED_CREATION_ERROR);
     }
   }
 
