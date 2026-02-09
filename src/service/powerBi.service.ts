@@ -117,7 +117,7 @@ export class PowerBiService {
   public async initClientProject(config: PowerBiConfigDto): Promise<PBIClientInitResultType> {
     logger.info(`New Workspace initialization starts for groupName: ${config.name}`);
     if (config?.name) {
-      let newGroup: PBIGroup;
+      let newGroup: PBIGroup | undefined = undefined;
       try {
         newGroup = await this.createGroup(GROUP_PREFIX + config.name);
 
@@ -197,7 +197,7 @@ export class PowerBiService {
         importData = await this.getImportInGroup(pbiGroup.id, importData.id);
       } while (importData.importState === 'Publishing');
       const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id);
-      const datasetId: string = datasets.find((dataset) => dataset.name === datasetName).id;
+      const datasetId: string = datasets.find((dataset) => dataset.name === datasetName)?.id;
       //Take ownership
       await this.datasetTakeOver(pbiGroup.id, datasetId);
 
@@ -278,8 +278,13 @@ export class PowerBiService {
   public async getGroup(groupId: string): Promise<PBIGroup> {
     if (groupId) {
       const groups: Array<PBIGroup> = await this.listGroups();
-
-      return groups.find((group) => group.id === groupId);
+      const group = groups.find((group) => group.id === groupId);
+      if (!group) {
+        throw new PowerBiError(PowerBiError.ERROR_MESSAGES.RESOURCE_NOT_FOUND, {
+          '%PARAMS%': `group with ID ${groupId}`,
+        });
+      }
+      return group;
     } else {
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': 'group ID' });
     }
@@ -764,7 +769,7 @@ export class PowerBiService {
 
   public async importInGroup(
     groupId: string,
-    file,
+    file: unknown,
     datasetName: string = `${Date.now()}`,
   ): Promise<Record<string, any>> {
     if (groupId) {
@@ -787,13 +792,12 @@ export class PowerBiService {
         datasetDisplayName: datasetName,
       };
 
-      const response = await HttpHandler.handleHttpCall(
+      const response = await HttpHandler.handleHttpCall<Record<string, any>>(
         AllowedApiPaths.IMPORTS_IN_GROUP,
         requestInit,
         pathParams,
         queryParams,
       );
-      console.log(response);
       return response;
     } else {
       logger.error('Missing required param: "groupId"');
@@ -941,7 +945,7 @@ export class PowerBiService {
     body?: any,
     customHeaders?: Map<string, any>,
   ): RequestInit {
-    let finalHeaders = {
+    let finalHeaders: Record<string, string> = {
       Authorization: 'Bearer ' + authorizationToken,
       ...powerBiRestConfig.headers,
     };

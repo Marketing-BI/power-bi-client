@@ -95,15 +95,15 @@ export class HttpHandler {
   public static async handleHttpResponse<T = unknown>(res: Response): Promise<T> {
     if (res?.ok) {
       let data: any;
-      let content = res.headers.get('Content-Type');
-      if (content.includes('application/xml') || content.includes('text/xml')) {
+      let contentType = res.headers.get('Content-Type');
+      if (contentType && (contentType.includes('application/xml') || contentType.includes('text/xml'))) {
         let charset = 'utf8';
-        if (res.headers.get('Content-Type').includes('charset=')) {
-          const cType = res.headers.get('Content-Type').split(';');
-          charset = cType.find((hPossibility) => hPossibility.includes('charset=')).split('=')[1];
+        if (contentType.includes('charset=')) {
+          const cType = contentType.split(';');
+          charset = cType.find((hPossibility) => hPossibility.includes('charset='))?.split('=')[1] || 'utf8';
         }
         return res.buffer().then((b) => iconv.decode(b, charset) as T);
-      } else if (content === 'application/zip') {
+      } else if (contentType === 'application/zip') {
         data = await res.text();
       } else {
         const respBody = await res.text();

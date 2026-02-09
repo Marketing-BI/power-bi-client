@@ -57,11 +57,10 @@ const AllowedApiPaths = {
  */
 export class FabricService {
   private readonly _fabricClient: FabricClient;
-  private _authorizationToken: AzureAccessToken;
+  private _authorizationToken: AzureAccessToken | null = null;
 
   constructor(fabricClient: FabricClient) {
     this._fabricClient = fabricClient;
-    this._authorizationToken = null;
   }
 
   /**
@@ -88,7 +87,7 @@ export class FabricService {
       method,
       headers: {
         ...fabricRestConfig.headers,
-        Authorization: `Bearer ${this._authorizationToken.accessToken}`,
+        Authorization: `Bearer ${this._authorizationToken!.accessToken}`,
       },
     };
 
@@ -122,7 +121,7 @@ export class FabricService {
     logger.info('Listing folders in workspace: %s', workspaceId);
 
     try {
-      let continuationToken: string = undefined;
+      let continuationToken: string = '';
       let folders: Array<FabricFolder> = [];
 
       do {
@@ -134,8 +133,8 @@ export class FabricService {
             workspaceId,
           },
           {
-            recursive: requestConfig.recursive?.toString() ?? undefined,
-            rootFolderId: requestConfig.rootFolderId,
+            ...(requestConfig.recursive !== undefined ? { recursive: requestConfig.recursive?.toString() } : {}),
+            ...(requestConfig.rootFolderId !== undefined ? { rootFolderId: requestConfig.rootFolderId } : {}),
             ...(continuationToken ? { continuationToken } : {}),
           },
         );
@@ -218,7 +217,7 @@ export class FabricService {
       // first get root folders without recursion - this can avoid unnecessary recursive calls if the folder already exists
       const rootFolders = await this.listFolders(workspaceId);
       let rootFolder = rootFolders.find((f) => f.displayName === rootFolderName && f.workspaceId === workspaceId);
-      let resultingFolder: FabricFolder = rootFolder;
+      let resultingFolder: FabricFolder | undefined = rootFolder;
       let rootFolderId = rootFolder?.id;
       if (!rootFolderId) {
         logger.info('Root folder "%s" not found. Creating it.', rootFolder);
@@ -233,7 +232,7 @@ export class FabricService {
       // find each subFolder in the list of all folders, if not found create it
       // iterate throught subFolders and filter them based on if found in allFolders. Break on first not found.
       let parentFolderId = rootFolderId;
-      let createFolders = [];
+      let createFolders: Array<string> = [];
       for (let i = 0; i < subFolders.length; i++) {
         const subFolderName = subFolders[i];
         let subFolder = allFolders.find((f) => f.displayName === subFolderName && f.workspaceId === workspaceId);
@@ -249,6 +248,11 @@ export class FabricService {
         const createdFolder = await this.createFolder(workspaceId, { displayName: folderName, parentFolderId });
         parentFolderId = createdFolder.id; // update parent folder id for the next iteration
         resultingFolder = createdFolder; // update resulting folder to be returned at the end
+      }
+
+      if (!resultingFolder) {
+        logger.error('Folder path "%s" is invalid. No folder found or created.', folderPath);
+        throw new Error('Folder path is invalid. No folder found or created.');
       }
 
       logger.info('Folder retrieved: %s', resultingFolder.id);

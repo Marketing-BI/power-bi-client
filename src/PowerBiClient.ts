@@ -47,7 +47,7 @@ export class PowerBiClient {
     };
   }
 
-  public async getLastDatasetRefresh(groupId: string, datasetId: string): Promise<PBIRefresh> {
+  public async getLastDatasetRefresh(groupId: string, datasetId: string): Promise<PBIRefresh | undefined> {
     const refreshes: Array<PBIRefresh> = await this._powerBiService.getDatasetRefreshes(groupId, datasetId);
 
     refreshes.sort((o1, o2) => (o1.startTime < o2.startTime ? -1 : 1));
@@ -55,7 +55,7 @@ export class PowerBiClient {
     return refreshes.pop();
   }
 
-  public async refreshDataset(groupId: string, datasetId: string): Promise<PBIRefresh> {
+  public async refreshDataset(groupId: string, datasetId: string): Promise<PBIRefresh | undefined> {
     await this._powerBiService.datasetRefresh(groupId, datasetId);
 
     return this.getLastDatasetRefresh(groupId, datasetId);

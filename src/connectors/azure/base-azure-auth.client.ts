@@ -1,4 +1,4 @@
-import { ConfidentialClientApplication, LogLevel } from '@azure/msal-node';
+import { ConfidentialClientApplication, type Configuration, LogLevel } from '@azure/msal-node';
 import { AuthenticationResult } from '@azure/msal-common';
 import { AzureAccessToken } from './dto/AzureAccessToken';
 import { AzureError } from './dto/errors/AzureError';
@@ -37,7 +37,7 @@ export abstract class BaseAzureAuthClient {
    * Get a new access token from Azure AD.
    */
   public async getToken(): Promise<AuthenticationResult> {
-    const config = {
+    const config: Configuration = {
       auth: {
         clientId: this._clientId,
         authority: this._authority,
@@ -45,7 +45,7 @@ export abstract class BaseAzureAuthClient {
       },
       system: {
         loggerOptions: {
-          loggerCallback(loglevel, message, containsPii) {
+          loggerCallback(_, message) {
             logger.debug(message);
           },
           piiLoggingEnabled: false,
@@ -63,6 +63,9 @@ export abstract class BaseAzureAuthClient {
 
     try {
       const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
+      if (!response || !response.accessToken) {
+        throw new Error('Failed to acquire access token');
+      }
       return response;
     } catch (error) {
       const errorMsg = JSON.stringify(error);
@@ -75,7 +78,7 @@ export abstract class BaseAzureAuthClient {
    * Generate a valid access token.
    * Reuses existing token if valid, otherwise generates a new one.
    */
-  public async generateValidToken(currentToken: AzureAccessToken): Promise<AzureAccessToken> {
+  public async generateValidToken(currentToken?: AzureAccessToken | null): Promise<AzureAccessToken> {
     let token: AzureAccessToken;
     if (currentToken && isValidToken(currentToken)) {
       logger.info('Azure token is valid. Reuse existing token with expiration: %s.', currentToken.expireAt);
@@ -83,7 +86,8 @@ export abstract class BaseAzureAuthClient {
     } else {
       logger.info('Azure token is invalid or missing. Generating new token.');
       const tokenData = await this.getToken();
-      token = new AzureAccessToken(tokenData.accessToken, new Date(tokenData.expiresOn.toISOString()).getTime());
+      const expireAt = tokenData.expiresOn?.getTime() || tokenData.extExpiresOn?.getTime();
+      token = new AzureAccessToken(tokenData.accessToken, expireAt!);
     }
 
     return token;
@@ -95,5 +99,5 @@ export abstract class BaseAzureAuthClient {
  * A token is valid if it expires at least TIME_SHIFT_CONSTANT ms in the future.
  */
 export const isValidToken = (token: Readonly<AzureAccessToken>): boolean => {
-  return token.accessToken && Date.now() + TIME_SHIFT_CONSTANT < token.expireAt;
+  return !!token.accessToken && Date.now() + TIME_SHIFT_CONSTANT < token.expireAt;
 };
