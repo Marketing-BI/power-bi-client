@@ -102,6 +102,14 @@ Other branches contain individual features in development.
 
 ## 🪵 Change log
 
+### v1.1.0
+
+#### Added
+
+- Fabric Service
+  - Create folders (even by name!)
+  - List folders
+
 ### v1.0.0
 
 - Initial public release.
