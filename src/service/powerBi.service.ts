@@ -326,8 +326,8 @@ export class PowerBiService {
     }
   }
 
-  public async addGroupUser(groupId: string, user: PBIGroupUser): Promise<void> {
-    if (groupId) {
+  public async addGroupUser(groupId: string, user: Readonly<PBIGroupUser>): Promise<void> {
+    if (groupId && user) {
       const requestInit: RequestInit = this.assembleRequest(
         AllowedMethodEnum.POST,
         await this.handleToken(),
