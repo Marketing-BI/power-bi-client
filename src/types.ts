@@ -1,4 +1,4 @@
-import { IAzureAuthConfig } from './connectors/azure/interfaces';
+import type { IAzureAuthConfig } from './connectors/azure/interfaces';
 
 export * from './connectors/azure/interfaces';
 export * from './service/interfaces.pbi';

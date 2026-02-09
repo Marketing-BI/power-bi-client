@@ -1,29 +1,31 @@
 {
   "compilerOptions": {
-    "target": "es6",
-    "module": "node16",
-    "moduleResolution": "node16",
-    "rootDirs": [
-      "./src"
-    ],
+    /* Target Node Capabilities */
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    /* Output settings */
     "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    /* Strictness & Safety */
+    "strict": true,
     "esModuleInterop": true,
-    "strict": false,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    /* Decorators  */
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "declaration": true,
-    "typeRoots": [
-      "./node_modules/@types"
-    ],
-    "types": [
-      "jest"
-    ]
   },
+  "include": [
+    "src/**/*"
+  ],
   "exclude": [
     "node_modules",
     "dist",
-  ],
-  "include": [
-    "src/**/*"
+    "**/*.spec.ts",
+    "**/*.test.ts"
   ]
 }

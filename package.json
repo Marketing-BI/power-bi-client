@@ -6,6 +6,7 @@
   "license": "UNLICENSED",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "type": "commonjs",
   "files": [
     "/dist"
   ],
@@ -20,12 +21,13 @@
     "create_index": "run-script-os",
     "create_index:win32": "echo module.exports = require('./dist'); > index.js",
     "create_index:linux:darwin": "echo \"module.exports = require('./dist');\" > index.js",
-    "test": "jest",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
     "build_ts": "./node_modules/.bin/tsc && npm run create_index",
     "prepare": "npm run build_ts"
   },
   "keywords": [],
   "devDependencies": {
+    "@swc/jest": "^0.2.39",
     "@types/jest": "^30.0.0",
     "@types/node": "^18.11.10",
     "@types/node-fetch": "^2.5.12",

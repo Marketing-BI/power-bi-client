@@ -8,7 +8,14 @@ import { FabricClient } from '../connectors/azure';
 import { AzureAccessToken } from '../connectors/azure/dto/AzureAccessToken';
 import { HttpHandler } from '../httpHandler/HttpHandler';
 import { logger } from '../configuration';
-import type { FabricWorkspace, CreateFolderRequest, FabricFolder, ListFoldersRequest } from './interfaces.fabric';
+import type {
+  FabricWorkspace,
+  CreateFolderRequest,
+  FabricFolder,
+  ListFoldersRequest,
+  ListFolderResponse,
+} from './interfaces.fabric';
+import { PBIResponse } from './powerBI.interfaces';
 
 /**
  * Fabric workspace configuration
@@ -119,7 +126,7 @@ export class FabricService {
       let folders: Array<FabricFolder> = [];
 
       do {
-        const response = await this.makeApiCall<void>(
+        const response = await this.makeApiCall<ListFolderResponse>(
           AllowedMethodEnum.GET,
           AllowedApiPaths.WORKSPACE_FOLDERS,
           undefined,
@@ -132,8 +139,8 @@ export class FabricService {
             ...(continuationToken ? { continuationToken } : {}),
           },
         );
-        folders.push(...(response.value || []));
-        continuationToken = response.continuationToken;
+        folders.push(...(response?.value || []));
+        continuationToken = response?.continuationToken;
       } while (continuationToken);
 
       return folders;
@@ -205,15 +212,18 @@ export class FabricService {
     logger.info('Getting folder %s from workspace: %s', folderPath, workspaceId);
 
     const folderNames = folderPath.split('/').map((name) => name.trim());
-    const [rootFolder, ...subFolders] = folderNames;
+    const [rootFolderName, ...subFolders] = folderNames;
 
     try {
       // first get root folders without recursion - this can avoid unnecessary recursive calls if the folder already exists
       const rootFolders = await this.listFolders(workspaceId);
-      let rootFolderId = rootFolders.find((f) => f.displayName === rootFolder)?.id;
+      let rootFolder = rootFolders.find((f) => f.displayName === rootFolderName && f.workspaceId === workspaceId);
+      let resultingFolder: FabricFolder = rootFolder;
+      let rootFolderId = rootFolder?.id;
       if (!rootFolderId) {
         logger.info('Root folder "%s" not found. Creating it.', rootFolder);
-        const createdRootFolder = await this.createFolder(workspaceId, { displayName: rootFolder });
+        const createdRootFolder = await this.createFolder(workspaceId, { displayName: rootFolderName });
+        resultingFolder = createdRootFolder;
         rootFolderId = createdRootFolder.id;
       }
       logger.info('Root folder "%s" has ID: %s', rootFolder, rootFolderId);
@@ -224,7 +234,6 @@ export class FabricService {
       // iterate throught subFolders and filter them based on if found in allFolders. Break on first not found.
       let parentFolderId = rootFolderId;
       let createFolders = [];
-      let resultingFolder: FabricFolder = undefined;
       for (let i = 0; i < subFolders.length; i++) {
         const subFolderName = subFolders[i];
         let subFolder = allFolders.find((f) => f.displayName === subFolderName && f.workspaceId === workspaceId);
