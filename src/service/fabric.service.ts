@@ -15,7 +15,6 @@ import type {
   ListFoldersRequest,
   ListFolderResponse,
 } from './interfaces.fabric';
-import { PBIResponse } from './powerBI.interfaces';
 
 /**
  * Fabric workspace configuration
@@ -177,6 +176,27 @@ export class FabricService {
   }
 
   /**
+   * Remove a folder from a workspace. Can only delete empty folders.
+   * @param workspaceId
+   * @param folderId
+   */
+  public async removeFolder(workspaceId: string, folderId: string): Promise<void> {
+    logger.info('Removing folder "%s" from workspace: %s', folderId, workspaceId);
+
+    try {
+      await this.makeApiCall<void>(AllowedMethodEnum.DELETE, AllowedApiPaths.WORKSPACE_FOLDER, undefined, {
+        workspaceId,
+        folderId,
+      });
+
+      logger.info('Folder removed successfully: %s', folderId);
+    } catch (error: any) {
+      logger.error('Error removing folder: %s', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Get a specific folder from a workspace
    * @param workspaceId The workspace ID
    * @param folderId The folder ID
@@ -220,12 +240,12 @@ export class FabricService {
       let resultingFolder: FabricFolder | undefined = rootFolder;
       let rootFolderId = rootFolder?.id;
       if (!rootFolderId) {
-        logger.info('Root folder "%s" not found. Creating it.', rootFolder);
+        logger.info('Root folder "%s" not found. Creating it.', rootFolderName);
         const createdRootFolder = await this.createFolder(workspaceId, { displayName: rootFolderName });
         resultingFolder = createdRootFolder;
         rootFolderId = createdRootFolder.id;
       }
-      logger.info('Root folder "%s" has ID: %s', rootFolder, rootFolderId);
+      logger.info('Root folder "%s" has ID: %s', rootFolderName, rootFolderId);
 
       // now recursively get or create subfolders if needed
       const allFolders = await this.listFolders(workspaceId, { recursive: true, rootFolderId });
@@ -235,12 +255,16 @@ export class FabricService {
       let createFolders: Array<string> = [];
       for (let i = 0; i < subFolders.length; i++) {
         const subFolderName = subFolders[i];
-        let subFolder = allFolders.find((f) => f.displayName === subFolderName && f.workspaceId === workspaceId);
+        let subFolder = allFolders.find(
+          (f) =>
+            f.displayName === subFolderName && f.workspaceId === workspaceId && f.parentFolderId === parentFolderId,
+        );
         if (!subFolder) {
-          logger.info('Subfolder "%s" not found under parent ID %s.', subFolderName);
+          logger.info('Subfolder "%s" not found under parent ID %s.', subFolderName, parentFolderId);
           createFolders = subFolders.slice(i); // all remaining folders in the path need to be created
           break;
         }
+        parentFolderId = subFolder.id; // update parent folder id for the next iteration
         resultingFolder = subFolder; // if folder is found, update the resulting folder to be returned at the end
       }
       for (const folderName of createFolders) {
