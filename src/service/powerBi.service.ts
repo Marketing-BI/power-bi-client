@@ -2,7 +2,7 @@ import FormData from 'form-data';
 import { RequestInit } from 'node-fetch';
 
 import { PowerBiConfigDto, PowerBiError } from './index';
-import {
+import type {
   PBICapacity,
   PBICreateDataSourceRequest,
   PBICredentialDetails,
@@ -11,6 +11,9 @@ import {
   PBIReport,
   PBIReportPage,
   PBIResponse,
+  PBIDatasource,
+  PBIDataset,
+  PBIImport,
 } from './powerBI.interfaces';
 
 import { logger } from '../configuration';
@@ -262,7 +265,7 @@ export class PowerBiService {
   public async listGroups(): Promise<Array<PBIGroup>> {
     const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
     let groups: Array<PBIGroup>;
-    const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.GROUPS, requestInit);
+    const respBody = await HttpHandler.handleHttpCall<any>(AllowedApiPaths.GROUPS, requestInit);
 
     if (respBody.value && respBody.value.length > 0) {
       groups = respBody.value;
@@ -317,7 +320,7 @@ export class PowerBiService {
         groupId: groupId,
       };
 
-      return (await HttpHandler.handleHttpCall(AllowedApiPaths.GROUP_USERS, requestInit, pathParams)).value;
+      return (await HttpHandler.handleHttpCall<any>(AllowedApiPaths.GROUP_USERS, requestInit, pathParams)).value;
     } else {
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': 'group ID' });
     }
@@ -351,7 +354,11 @@ export class PowerBiService {
         groupId: groupId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.REPORTS_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIReport>>>(
+        AllowedApiPaths.REPORTS_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reports: Array<PBIReport>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -374,7 +381,11 @@ export class PowerBiService {
         reportId: reportId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.REPORT_PAGES_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIReportPage>>>(
+        AllowedApiPaths.REPORT_PAGES_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reportPages: Array<PBIReportPage>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -391,14 +402,18 @@ export class PowerBiService {
     }
   }
 
-  public async listDatasetsInGroup(groupId: string): Promise<Array<any>> {
+  public async listDatasetsInGroup(groupId: string): Promise<Array<PBIDataset>> {
     if (groupId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
       const pathParams: Record<string, any> = {
         groupId: groupId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.DATASETS_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIDataset>>>(
+        AllowedApiPaths.DATASETS_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reports: Array<any>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -413,7 +428,7 @@ export class PowerBiService {
     }
   }
 
-  public async listDatasourcesInGroup(groupId: string, datasetId: string): Promise<Array<any>> {
+  public async listDatasourcesInGroup(groupId: string, datasetId: string): Promise<Array<PBIDatasource>> {
     if (groupId && datasetId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
       const pathParams: Record<string, any> = {
@@ -421,7 +436,11 @@ export class PowerBiService {
         datasetId: datasetId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.DATASOURCE_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIDatasource>>>(
+        AllowedApiPaths.DATASOURCE_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reports: Array<any>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -649,7 +668,7 @@ export class PowerBiService {
         datasetId: datasetId,
       };
 
-      const response = await HttpHandler.handleHttpCall(
+      const response = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIRefresh>>>(
         AllowedApiPaths.DATASETS_IN_GROUP_REFRESHES,
         requestInit,
         pathParams,
@@ -671,7 +690,11 @@ export class PowerBiService {
         groupId: groupId,
       };
 
-      const response = await HttpHandler.handleHttpCall(AllowedApiPaths.DATASETS_IN_GROUP, requestInit, pathParams);
+      const response = await HttpHandler.handleHttpCall<PBIResponse<Array<Record<string, any>>>>(
+        AllowedApiPaths.DATASETS_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
 
       return response.value;
     } else {
@@ -778,7 +801,7 @@ export class PowerBiService {
     }
   }
 
-  public async getImportInGroup(groupId: string, importId: string): Promise<Record<string, any>> {
+  public async getImportInGroup(groupId: string, importId: string): Promise<PBIImport> {
     if (groupId && importId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
 
@@ -787,7 +810,11 @@ export class PowerBiService {
         importId: importId,
       };
 
-      const response = await HttpHandler.handleHttpCall(AllowedApiPaths.IMPORT_IN_GROUP, requestInit, pathParams);
+      const response = await HttpHandler.handleHttpCall<PBIImport>(
+        AllowedApiPaths.IMPORT_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       console.log(response);
       if (response.importState === 'Failed') {
         throw new PowerBiError(PowerBiError.ERROR_MESSAGES.FAILED_IMPORT);

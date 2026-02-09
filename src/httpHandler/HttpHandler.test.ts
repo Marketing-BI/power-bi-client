@@ -68,7 +68,6 @@ describe('HttpHandler', () => {
       // 1. First fetch completes
       // 2. Code checks for 429
       // 3. setTimeout is scheduled
-      await new Promise(process.nextTick);
       // Now advance the timer
       await jest.runAllTimersAsync();
 
