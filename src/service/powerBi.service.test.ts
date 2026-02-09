@@ -565,14 +565,14 @@ describe('PowerBiService', () => {
 
       mockHttpHandler.handleHttpCall.mockResolvedValueOnce(mockImport);
 
-      const result = await powerBiService.importInGroup(mockGroupId, mockFile);
+      const result = await powerBiService.importInGroup(mockGroupId, mockFile, 'uuid-folder-id-123');
 
       expect(result).toEqual(mockImport);
     });
 
     it('should throw error when groupId is missing', async () => {
       const mockFile = Buffer.from('mock pbix file content');
-      await expect(powerBiService.importInGroup('', mockFile)).rejects.toThrow();
+      await expect(powerBiService.importInGroup('', mockFile, 'uuid-folder-id-123')).rejects.toThrow();
     });
   });
 

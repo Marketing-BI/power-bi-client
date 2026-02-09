@@ -29,7 +29,7 @@ export class PowerBiConfigDto {
   readonly datasourceParams: Array<PBIDatasourceParam> = new Array<PBIDatasourceParam>();
   readonly scheduledTimes: Array<string> | undefined;
   readonly scheduledDays: Array<string> | undefined;
-
+  readonly importFolderId: string;
   // Changed only by administrators
   private readonly _pathToTemplateFile: string;
   readonly templateGroupId: string;
@@ -42,10 +42,12 @@ export class PowerBiConfigDto {
     snowflakeCredentialDetails: ISnowflakeCredentials,
     sourceSystemPBIConfig: ISourceSystemPBIConfig,
     templateSupplier: Function,
+    importFolderId: string,
     schedule?: IDatasetSchedule,
     capacityId?: string,
   ) {
     this.name = name;
+    this.importFolderId = importFolderId;
     if (sourceSystemPBIConfig.credentialsTemplate) {
       const credentials: PBICredentials = {
         credentialData: sourceSystemPBIConfig.credentialsTemplate.map((templateItem) =>

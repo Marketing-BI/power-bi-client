@@ -109,6 +109,8 @@ Other branches contain individual features in development.
 - Fabric Service
   - Create folders (even by name!)
   - List folders
+- Power BI Import to folder
+  - Add parent folder ID param to import of PBIX
 
 ### v1.0.0
 

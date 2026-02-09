@@ -190,7 +190,12 @@ export class PowerBiService {
       const data: Buffer = await config.getTemplate();
       // dataset name matches the name of pbix report
       const datasetName: string = config.name;
-      let importData: Record<string, any> = await this.importInGroup(pbiGroup.id, data, datasetName);
+      let importData: Record<string, any> = await this.importInGroup(
+        pbiGroup.id,
+        data,
+        config.importFolderId,
+        datasetName,
+      );
       do {
         logger.info('%s - Import with id: `%s` in group: `%s` still publishing...', importData.id, pbiGroup.id);
         await new Promise((r) => setTimeout(r, 2000));
@@ -770,6 +775,7 @@ export class PowerBiService {
   public async importInGroup(
     groupId: string,
     file: unknown,
+    parentFolderId: string,
     datasetName: string = `${Date.now()}`,
   ): Promise<Record<string, any>> {
     if (groupId) {
@@ -790,6 +796,7 @@ export class PowerBiService {
       };
       const queryParams: Record<string, any> = {
         datasetDisplayName: datasetName,
+        subfolderObjectId: parentFolderId,
       };
 
       const response = await HttpHandler.handleHttpCall<Record<string, any>>(
