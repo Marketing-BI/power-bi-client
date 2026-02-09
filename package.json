@@ -28,6 +28,7 @@
   "keywords": [],
   "devDependencies": {
     "@swc/jest": "^0.2.39",
+    "@types/dotenv": "^6.1.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^18.11.10",
     "@types/node-fetch": "^2.5.12",

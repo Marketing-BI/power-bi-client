@@ -47,9 +47,9 @@ describe('PowerBiClient', () => {
 
   describe('Custom scopes', () => {
     const customPowerBiClient: PowerBiClient = new PowerBiClient({
-      clientId: process.env.AZURE_PB_CLIENT_ID,
-      clientSecret: process.env.AZURE_PB_CLIENT_SECRET,
-      tenantId: process.env.AZURE_PB_TENANT_ID,
+      clientId: process.env.AZURE_PB_CLIENT_ID!,
+      clientSecret: process.env.AZURE_PB_CLIENT_SECRET!,
+      tenantId: process.env.AZURE_PB_TENANT_ID!,
       scopes: ['https://analysis.windows.net/powerbi/api/.default'],
     });
 
