@@ -14,20 +14,19 @@ import {
 } from './powerBI.interfaces';
 
 import { logger } from '../configuration';
-import { AzureClient } from '../connectors/azure';
+import { PowerBiClient } from '../connectors/azure';
 import { AzureAccessToken } from '../connectors/azure/dto/AzureAccessToken';
 import { HttpHandler } from '../httpHandler/HttpHandler';
-import {
+import type {
   GenerateTokenResponseType,
   PBIClientInitReportType,
   PBIClientInitResultType,
   PBIGenerateTokenResponseType,
   PBIRefresh,
   PBIRefreshSchedule,
-  PBIRefreshStatusEnum,
-  PBIScheduleNotifyOption,
   ReportPageType,
 } from './interfaces.pbi';
+import { PBIRefreshStatusEnum, PBIScheduleNotifyOption } from './enums';
 
 let powerBiRestConfig = {
   url: 'https://api.powerbi.com/v1.0/myorg',
@@ -45,12 +44,12 @@ let powerBiRestConfig = {
   authorizationTokenExpiredAt: null,
 };
 
-enum AllowedMethodEnum {
-  GET = 'GET',
-  PATCH = 'PATCH',
-  POST = 'POST',
-  DELETE = 'DELETE',
-}
+const AllowedMethodEnum = {
+  GET: 'GET',
+  PATCH: 'PATCH',
+  POST: 'POST',
+  DELETE: 'DELETE',
+} as const;
 
 const AllowedApiPaths = {
   GROUPS: powerBiRestConfig.url + '/groups',
@@ -87,6 +86,7 @@ const REFRESH_FINAL_STATUSES = [
   PBIRefreshStatusEnum.Failed,
   PBIRefreshStatusEnum.Completed,
   PBIRefreshStatusEnum.Disabled,
+  PBIRefreshStatusEnum.Unknown,
 ];
 
 const GROUP_PREFIX: string = process.env.POWER_BI_GROUP_PREFIX ? process.env.POWER_BI_GROUP_PREFIX : '';
@@ -97,10 +97,10 @@ const GROUP_PREFIX: string = process.env.POWER_BI_GROUP_PREFIX ? process.env.POW
 // Add user management a JWT generation same as PAPI
 // Add logs and result store
 export class PowerBiService {
-  private readonly _azureClient: AzureClient;
+  private readonly _azurePbiClient: PowerBiClient;
 
-  constructor(azureClient: AzureClient) {
-    this._azureClient = azureClient;
+  constructor(pbiClient: PowerBiClient) {
+    this._azurePbiClient = pbiClient;
   }
 
   private static reportPageConvertor(page: PBIReportPage): ReportPageType {
@@ -851,7 +851,10 @@ export class PowerBiService {
 
   public allRefreshesInFinalState(refreshes: Array<PBIRefresh>) {
     return refreshes
-      ? refreshes.filter((refresh) => REFRESH_FINAL_STATUSES.includes(refresh.status)).length === refreshes.length
+      ? refreshes.filter(
+          (refresh) =>
+            refresh.status !== PBIRefreshStatusEnum.Unknown && REFRESH_FINAL_STATUSES.includes(refresh.status),
+        ).length === refreshes.length
       : false;
   }
 
@@ -905,9 +908,8 @@ export class PowerBiService {
     }
   }
 
-  //TODO: switch to HttpRequest
   private assembleRequest(
-    method: AllowedMethodEnum,
+    method: keyof typeof AllowedMethodEnum,
     authorizationToken: string,
     body?: any,
     customHeaders?: Map<string, any>,
@@ -931,7 +933,7 @@ export class PowerBiService {
   }
 
   private async handleToken(): Promise<string> {
-    const validToken: AzureAccessToken = await this._azureClient.generateValidToken(
+    const validToken: AzureAccessToken = await this._azurePbiClient.generateValidToken(
       powerBiRestConfig.authorizationToken as AzureAccessToken,
     );
     powerBiRestConfig.authorizationToken = validToken;
