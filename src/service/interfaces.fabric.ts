@@ -6,6 +6,8 @@ export interface FabricWorkspace {
   displayName: string;
   type?: string;
   state?: string;
+  capacityId?: string;
+  domainId?: string;
   isReadOnly?: boolean;
   isOnDedicatedCapacity?: boolean;
 }
@@ -17,6 +19,7 @@ export interface FabricFolder {
   id: string;
   displayName: string;
   workspaceId: string;
+  parentFolderId?: string;
 }
 
 /**
