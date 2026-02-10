@@ -83,7 +83,7 @@ const AllowedApiPaths = {
   REPORT_PAGES_IN_GROUP: powerBiRestConfig.url + '/groups/:groupId/reports/:reportId/pages',
   CAPACITIES: powerBiRestConfig.url + '/capacities',
   GROUPS_ASSIGN_TO_CAPACITY: powerBiRestConfig.url + '/groups/:groupId/AssignToCapacity',
-};
+} as const;
 
 const REFRESH_FINAL_STATUSES = [
   PBIRefreshStatusEnum.Failed,
@@ -488,9 +488,24 @@ export class PowerBiService {
     }
   }
 
+  /**
+   * Updates the parameters of a Power BI dataset within a group.
+   * This method is responsible for making sure, the PBI Semantic model is
+   * reading data from correct Tables or views
+   * @param groupId - The ID of the group/workspace containing the dataset. Required.
+   * @param datasetId - The ID of the dataset to update.
+   * @param params - An array of parameter update objects containing the details to update.
+   * @returns A promise that resolves when the update is complete, or void if params is empty.
+   * @throws {PowerBiError} If groupId is not provided.
+   * @example
+   * const params = [{ name: 'param1', newValue: 'value1' }];
+   * await powerBiService.datasetUpdateParameters('group-123', 'dataset-456', params);
+   */
   public async datasetUpdateParameters(groupId: string, datasetId: string, params: Array<Record<string, any>>) {
     if (groupId) {
-      if (!params || params.length === 0) return;
+      if (!params || params.length === 0) {
+        return;
+      }
       const body = {
         updateDetails: params,
       };
@@ -515,50 +530,6 @@ export class PowerBiService {
     } else {
       logger.error('Missing required param: "groupId"');
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': 'groupId' });
-    }
-  }
-
-  public async datasetUpdateDatasource(groupId: string, datasetId: string) {
-    if (groupId && datasetId) {
-      const body = {
-        updateDetails: [
-          {
-            datasourceSelector: {
-              datasourceType: 'Extension',
-              connectionDetails: {
-                path: 'keboola.west-europe.azure.snowflakecomputing.com;KEBOOLA_PROD',
-                kind: 'Snowflake',
-              },
-            },
-            connectionDetails: {
-              path: 'keboola.west-europe.azure.snowflakecomputing.com;KEBOOLA_PROD',
-            },
-          },
-        ],
-      };
-
-      const requestInit: RequestInit = this.assembleRequest(
-        AllowedMethodEnum.PATCH,
-        await this.handleToken(),
-        JSON.stringify(body),
-      );
-
-      const pathParams: Record<string, any> = {
-        groupId: groupId,
-        datasetId: datasetId,
-      };
-
-      const response = await HttpHandler.handleHttpCall(
-        AllowedApiPaths.DATASETS_IN_GROUP_UPDATE_DATASOURCE,
-        requestInit,
-        pathParams,
-      );
-      logger.debug(JSON.stringify(response));
-    } else {
-      logger.error('Missing required param: "groupId, datasetId"');
-      throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, {
-        '%PARAMS%': '[groupId, datasetId]',
-      });
     }
   }
 
@@ -979,6 +950,18 @@ export class PowerBiService {
     return validToken.accessToken;
   }
 
+  /**
+   * Updates the credentials for a Power BI gateway datasource.
+   * This method makes sure that the semantic model can properly connect to the datasource using the provided credentials by updating them in the gateway settings.
+   *
+   * @param gatewayId - The unique identifier of the gateway
+   * @param datasourceId - The unique identifier of the datasource within the gateway
+   * @param dataToUpd - The credential details to update for the datasource
+   *
+   * @throws {PowerBiError} If gatewayId or datasourceId is missing or falsy
+   *
+   * @returns A promise that resolves when the datasource credentials have been successfully updated
+   */
   private async gatewayDatasourceUpdate(gatewayId: string, datasourceId: string, dataToUpd: PBICredentialDetails) {
     if (gatewayId && datasourceId) {
       const body = {

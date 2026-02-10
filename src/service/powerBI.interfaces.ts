@@ -114,9 +114,11 @@ export interface SourceSystemValues {
   templateGroupId: string;
 }
 
-export interface PBICredentials {
+export interface PBICredentialsData {
   credentialData: Array<PBICredentialDataItem>;
 }
+
+export type PBICredentials = PBICredentialsData | string;
 
 export interface PBICredentialDataItem {
   name: string;
