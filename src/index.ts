@@ -1,4 +1,5 @@
 export { PowerBiClient } from './PowerBiClient';
-export * from  './types';
+export { FabricService } from './service/fabric.service';
+export * from './types';
 
-export * from './connectors/azure'
+export * from './connectors/azure';
