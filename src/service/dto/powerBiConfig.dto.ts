@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
 import {
-  PBICredentialDataItem,
+  PBICredentialsData,
   PBICredentialDetails,
   PBICredentials,
   PBICredentialTypeEnum,
@@ -66,10 +66,30 @@ export class PowerBiConfigDto {
 const createPbiCredentials = (credentials: Readonly<PBICredentials>): PBICredentialDetails => {
   return {
     credentialType: PBICredentialTypeEnum.Basic,
-    credentials: JSON.stringify(credentials),
+    credentials: makePbiCrendentials(credentials),
     encryptedConnection: PBIEncryptedConnectionEnum.Encrypted,
     encryptionAlgorithm: PBIEncryptionAlgorithmEnum.None,
     privacyLevel: PBIPrivacyLevelEnum.Organizational,
     useEndUserOAuth2Credentials: false,
   };
 };
+function makePbiCrendentials(credentials: Readonly<PBICredentials>) {
+  if (typeof credentials === 'string') {
+    // It must be Google SA
+    const googleSa = JSON.parse(credentials);
+    return JSON.stringify({
+      credentialData: [
+        {
+          name: 'username',
+          value: googleSa.client_email,
+        },
+        {
+          name: 'password',
+          value: credentials,
+        },
+      ],
+    } satisfies PBICredentialsData);
+  }
+
+  return JSON.stringify(credentials);
+}

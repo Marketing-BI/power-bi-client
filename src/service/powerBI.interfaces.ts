@@ -121,7 +121,7 @@ export interface PBICredentialsData {
 export type PBICredentials = PBICredentialsData | string;
 
 export interface PBICredentialDataItem {
-  name: string;
+  name: 'username' | 'password';
   value: string;
 }
 
