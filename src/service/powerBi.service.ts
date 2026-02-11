@@ -203,6 +203,13 @@ export class PowerBiService {
       } while (importData.importState === 'Publishing');
       const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id);
       const datasetId: string = datasets.find((dataset) => dataset.name === datasetName)?.id;
+      if (!datasetId) {
+        logger.error('Dataset with name `%s` was not found in group `%s` after import', datasetName, pbiGroup.id);
+        throw new PowerBiError(PowerBiError.ERROR_MESSAGES.RESOURCE_NOT_FOUND, {
+          [PowerBiError.PARAM_NAMES.PARAMS]: `dataset with name ${datasetName} in group ${pbiGroup.id}`,
+        })
+      }
+
       //Take ownership
       await this.datasetTakeOver(pbiGroup.id, datasetId);
 

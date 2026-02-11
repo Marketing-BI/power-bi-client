@@ -4,6 +4,8 @@ import { logger } from '../configuration';
 import { HttpError } from './HttpError';
 
 const ERROR_TOO_MANY_REQUESTS = 429;
+const DEFAULT_RETRY_TIMEOUT = 60;
+const DEFAULT_MAX_API_CALLS = 3;
 
 export class HttpHandler {
   /**
@@ -18,7 +20,11 @@ export class HttpHandler {
    */
   private static getRetryAfterSeconds(retryAfterHeader: string | null): number {
     if (!retryAfterHeader) {
-      return 60; // Default fallback
+      logger.warn(
+        'Retry-After header is missing in 429 response. Using default retry delay of %d seconds.',
+        DEFAULT_RETRY_TIMEOUT,
+      );
+      return DEFAULT_RETRY_TIMEOUT; // Default fallback
     }
 
     // Retry-After can be either seconds (integer) or HTTP date
@@ -56,12 +62,14 @@ export class HttpHandler {
     queryParams?: Record<string, string>,
   ): Promise<T> {
     let callUrl: string = HttpHandler.assembleUrl(url, pathParams, queryParams);
-
     logger.info('Start calling url: %s', callUrl);
-    let response: Response = await fetch(callUrl, requestInit);
 
-    // Handle 429 Too Many Requests with retry
-    if (response.status === ERROR_TOO_MANY_REQUESTS) {
+    let response: Response = await fetch(callUrl, requestInit);
+    // helper variable to determine how many times the request was called (initial call + retries) - can be used for telemetry/logging purposes
+    let calledTimes = 1;
+
+    // Handle 429 Too Many Requests with retry.
+    while (response.status === ERROR_TOO_MANY_REQUESTS && calledTimes < DEFAULT_MAX_API_CALLS) {
       const retryAfterHeader = response.headers.get('Retry-After');
       const delaySeconds = HttpHandler.getRetryAfterSeconds(retryAfterHeader);
       const delayMs = delaySeconds * 1000;
@@ -74,6 +82,7 @@ export class HttpHandler {
       // Retry the same request
       logger.info('Retrying request to url: %s', callUrl);
       response = await fetch(callUrl, requestInit);
+      calledTimes++;
     }
 
     return HttpHandler.handleHttpResponse<T>(response);
