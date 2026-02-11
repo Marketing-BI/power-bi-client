@@ -102,7 +102,12 @@ Other branches contain individual features in development.
 
 ## 🪵 Change log
 
-### v1.1.0
+### v2.0.0
+
+#### Breaking changes
+
+PowerBI service now supports only Google SA credentials!
+Changed PowerBIConfig DTO API.
 
 #### Added
 
