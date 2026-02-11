@@ -46,6 +46,19 @@ npm run build_ts
 
 Run tests (optional):
 
+Set up ENV vars in `env/.env.test` file:
+
+```console
+AZURE_AUTHORITY=
+AZURE_PB_CLIENT_ID=
+AZURE_PB_CLIENT_SECRET=
+AZURE_PB_RESOURCE=
+AZURE_PB_TENANT_ID=
+AZURE_PB_SECRET_ID=
+
+FABRIC_TESTING_WORKSPACE_ID=e61bd332-9268-4f92-a8c4-b3ccee2363a7
+```
+
 ```bash
 npm test
 ```
@@ -68,7 +81,7 @@ const client = new PowerBiClient(config);
 
 ### List of .env variables
 
-Create a `.env` file in the project root and set the following variables:
+Create a `.env` file in the project root folder and set the following variables:
 
 - POWER_BI_GROUP_PREFIX: Optional prefix for newly created workspaces
 
@@ -88,6 +101,16 @@ Branches in git follow this logic:
 Other branches contain individual features in development.
 
 ## 🪵 Change log
+
+### v1.1.0
+
+#### Added
+
+- Fabric Service
+  - Create folders (even by name!)
+  - List folders
+- Power BI Import to folder
+  - Add parent folder ID param to import of PBIX
 
 ### v1.0.0
 

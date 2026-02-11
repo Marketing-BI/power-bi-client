@@ -2,7 +2,7 @@ import FormData from 'form-data';
 import { RequestInit } from 'node-fetch';
 
 import { PowerBiConfigDto, PowerBiError } from './index';
-import {
+import type {
   PBICapacity,
   PBICreateDataSourceRequest,
   PBICredentialDetails,
@@ -11,23 +11,25 @@ import {
   PBIReport,
   PBIReportPage,
   PBIResponse,
+  PBIDatasource,
+  PBIDataset,
+  PBIImport,
 } from './powerBI.interfaces';
 
 import { logger } from '../configuration';
-import { AzureClient } from '../connectors/azure';
+import { PowerBiClient } from '../connectors/azure';
 import { AzureAccessToken } from '../connectors/azure/dto/AzureAccessToken';
 import { HttpHandler } from '../httpHandler/HttpHandler';
-import {
+import type {
   GenerateTokenResponseType,
   PBIClientInitReportType,
   PBIClientInitResultType,
   PBIGenerateTokenResponseType,
   PBIRefresh,
   PBIRefreshSchedule,
-  PBIRefreshStatusEnum,
-  PBIScheduleNotifyOption,
   ReportPageType,
 } from './interfaces.pbi';
+import { PBIRefreshStatusEnum, PBIScheduleNotifyOption } from './enums';
 
 let powerBiRestConfig = {
   url: 'https://api.powerbi.com/v1.0/myorg',
@@ -45,12 +47,12 @@ let powerBiRestConfig = {
   authorizationTokenExpiredAt: null,
 };
 
-enum AllowedMethodEnum {
-  GET = 'GET',
-  PATCH = 'PATCH',
-  POST = 'POST',
-  DELETE = 'DELETE',
-}
+const AllowedMethodEnum = {
+  GET: 'GET',
+  PATCH: 'PATCH',
+  POST: 'POST',
+  DELETE: 'DELETE',
+} as const;
 
 const AllowedApiPaths = {
   GROUPS: powerBiRestConfig.url + '/groups',
@@ -81,12 +83,13 @@ const AllowedApiPaths = {
   REPORT_PAGES_IN_GROUP: powerBiRestConfig.url + '/groups/:groupId/reports/:reportId/pages',
   CAPACITIES: powerBiRestConfig.url + '/capacities',
   GROUPS_ASSIGN_TO_CAPACITY: powerBiRestConfig.url + '/groups/:groupId/AssignToCapacity',
-};
+} as const;
 
 const REFRESH_FINAL_STATUSES = [
   PBIRefreshStatusEnum.Failed,
   PBIRefreshStatusEnum.Completed,
   PBIRefreshStatusEnum.Disabled,
+  PBIRefreshStatusEnum.Unknown,
 ];
 
 const GROUP_PREFIX: string = process.env.POWER_BI_GROUP_PREFIX ? process.env.POWER_BI_GROUP_PREFIX : '';
@@ -97,10 +100,10 @@ const GROUP_PREFIX: string = process.env.POWER_BI_GROUP_PREFIX ? process.env.POW
 // Add user management a JWT generation same as PAPI
 // Add logs and result store
 export class PowerBiService {
-  private readonly _azureClient: AzureClient;
+  private readonly _azurePbiClient: PowerBiClient;
 
-  constructor(azureClient: AzureClient) {
-    this._azureClient = azureClient;
+  constructor(pbiClient: PowerBiClient) {
+    this._azurePbiClient = pbiClient;
   }
 
   private static reportPageConvertor(page: PBIReportPage): ReportPageType {
@@ -114,7 +117,7 @@ export class PowerBiService {
   public async initClientProject(config: PowerBiConfigDto): Promise<PBIClientInitResultType> {
     logger.info(`New Workspace initialization starts for groupName: ${config.name}`);
     if (config?.name) {
-      let newGroup: PBIGroup;
+      let newGroup: PBIGroup | undefined = undefined;
       try {
         newGroup = await this.createGroup(GROUP_PREFIX + config.name);
 
@@ -187,14 +190,26 @@ export class PowerBiService {
       const data: Buffer = await config.getTemplate();
       // dataset name matches the name of pbix report
       const datasetName: string = config.name;
-      let importData: Record<string, any> = await this.importInGroup(pbiGroup.id, data, datasetName);
+      let importData: Record<string, any> = await this.importInGroup(
+        pbiGroup.id,
+        data,
+        config.importFolderId,
+        datasetName,
+      );
       do {
         logger.info('%s - Import with id: `%s` in group: `%s` still publishing...', importData.id, pbiGroup.id);
         await new Promise((r) => setTimeout(r, 2000));
         importData = await this.getImportInGroup(pbiGroup.id, importData.id);
       } while (importData.importState === 'Publishing');
       const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id);
-      const datasetId: string = datasets.find((dataset) => dataset.name === datasetName).id;
+      const datasetId: string = datasets.find((dataset) => dataset.name === datasetName)?.id;
+      if (!datasetId) {
+        logger.error('Dataset with name `%s` was not found in group `%s` after import', datasetName, pbiGroup.id);
+        throw new PowerBiError(PowerBiError.ERROR_MESSAGES.RESOURCE_NOT_FOUND, {
+          [PowerBiError.PARAM_NAMES.PARAMS]: `dataset with name ${datasetName} in group ${pbiGroup.id}`,
+        })
+      }
+
       //Take ownership
       await this.datasetTakeOver(pbiGroup.id, datasetId);
 
@@ -262,7 +277,7 @@ export class PowerBiService {
   public async listGroups(): Promise<Array<PBIGroup>> {
     const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
     let groups: Array<PBIGroup>;
-    const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.GROUPS, requestInit);
+    const respBody = await HttpHandler.handleHttpCall<any>(AllowedApiPaths.GROUPS, requestInit);
 
     if (respBody.value && respBody.value.length > 0) {
       groups = respBody.value;
@@ -275,8 +290,13 @@ export class PowerBiService {
   public async getGroup(groupId: string): Promise<PBIGroup> {
     if (groupId) {
       const groups: Array<PBIGroup> = await this.listGroups();
-
-      return groups.find((group) => group.id === groupId);
+      const group = groups.find((group) => group.id === groupId);
+      if (!group) {
+        throw new PowerBiError(PowerBiError.ERROR_MESSAGES.RESOURCE_NOT_FOUND, {
+          '%PARAMS%': `group with ID ${groupId}`,
+        });
+      }
+      return group;
     } else {
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': 'group ID' });
     }
@@ -317,14 +337,14 @@ export class PowerBiService {
         groupId: groupId,
       };
 
-      return (await HttpHandler.handleHttpCall(AllowedApiPaths.GROUP_USERS, requestInit, pathParams)).value;
+      return (await HttpHandler.handleHttpCall<any>(AllowedApiPaths.GROUP_USERS, requestInit, pathParams)).value;
     } else {
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': 'group ID' });
     }
   }
 
-  public async addGroupUser(groupId: string, user: PBIGroupUser): Promise<void> {
-    if (groupId) {
+  public async addGroupUser(groupId: string, user: Readonly<PBIGroupUser>): Promise<void> {
+    if (groupId && user) {
       const requestInit: RequestInit = this.assembleRequest(
         AllowedMethodEnum.POST,
         await this.handleToken(),
@@ -351,7 +371,11 @@ export class PowerBiService {
         groupId: groupId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.REPORTS_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIReport>>>(
+        AllowedApiPaths.REPORTS_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reports: Array<PBIReport>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -374,7 +398,11 @@ export class PowerBiService {
         reportId: reportId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.REPORT_PAGES_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIReportPage>>>(
+        AllowedApiPaths.REPORT_PAGES_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reportPages: Array<PBIReportPage>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -391,14 +419,18 @@ export class PowerBiService {
     }
   }
 
-  public async listDatasetsInGroup(groupId: string): Promise<Array<any>> {
+  public async listDatasetsInGroup(groupId: string): Promise<Array<PBIDataset>> {
     if (groupId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
       const pathParams: Record<string, any> = {
         groupId: groupId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.DATASETS_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIDataset>>>(
+        AllowedApiPaths.DATASETS_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reports: Array<any>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -413,7 +445,7 @@ export class PowerBiService {
     }
   }
 
-  public async listDatasourcesInGroup(groupId: string, datasetId: string): Promise<Array<any>> {
+  public async listDatasourcesInGroup(groupId: string, datasetId: string): Promise<Array<PBIDatasource>> {
     if (groupId && datasetId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
       const pathParams: Record<string, any> = {
@@ -421,7 +453,11 @@ export class PowerBiService {
         datasetId: datasetId,
       };
 
-      const respBody = await HttpHandler.handleHttpCall(AllowedApiPaths.DATASOURCE_IN_GROUP, requestInit, pathParams);
+      const respBody = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIDatasource>>>(
+        AllowedApiPaths.DATASOURCE_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       let reports: Array<any>;
 
       if (respBody.value && respBody.value.length > 0) {
@@ -459,9 +495,24 @@ export class PowerBiService {
     }
   }
 
+  /**
+   * Updates the parameters of a Power BI dataset within a group.
+   * This method is responsible for making sure, the PBI Semantic model is
+   * reading data from correct Tables or views
+   * @param groupId - The ID of the group/workspace containing the dataset. Required.
+   * @param datasetId - The ID of the dataset to update.
+   * @param params - An array of parameter update objects containing the details to update.
+   * @returns A promise that resolves when the update is complete, or void if params is empty.
+   * @throws {PowerBiError} If groupId is not provided.
+   * @example
+   * const params = [{ name: 'param1', newValue: 'value1' }];
+   * await powerBiService.datasetUpdateParameters('group-123', 'dataset-456', params);
+   */
   public async datasetUpdateParameters(groupId: string, datasetId: string, params: Array<Record<string, any>>) {
     if (groupId) {
-      if (!params || params.length === 0) return;
+      if (!params || params.length === 0) {
+        return;
+      }
       const body = {
         updateDetails: params,
       };
@@ -486,50 +537,6 @@ export class PowerBiService {
     } else {
       logger.error('Missing required param: "groupId"');
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': 'groupId' });
-    }
-  }
-
-  public async datasetUpdateDatasource(groupId: string, datasetId: string) {
-    if (groupId && datasetId) {
-      const body = {
-        updateDetails: [
-          {
-            datasourceSelector: {
-              datasourceType: 'Extension',
-              connectionDetails: {
-                path: 'keboola.west-europe.azure.snowflakecomputing.com;KEBOOLA_PROD',
-                kind: 'Snowflake',
-              },
-            },
-            connectionDetails: {
-              path: 'keboola.west-europe.azure.snowflakecomputing.com;KEBOOLA_PROD',
-            },
-          },
-        ],
-      };
-
-      const requestInit: RequestInit = this.assembleRequest(
-        AllowedMethodEnum.PATCH,
-        await this.handleToken(),
-        JSON.stringify(body),
-      );
-
-      const pathParams: Record<string, any> = {
-        groupId: groupId,
-        datasetId: datasetId,
-      };
-
-      const response = await HttpHandler.handleHttpCall(
-        AllowedApiPaths.DATASETS_IN_GROUP_UPDATE_DATASOURCE,
-        requestInit,
-        pathParams,
-      );
-      logger.debug(JSON.stringify(response));
-    } else {
-      logger.error('Missing required param: "groupId, datasetId"');
-      throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, {
-        '%PARAMS%': '[groupId, datasetId]',
-      });
     }
   }
 
@@ -649,7 +656,7 @@ export class PowerBiService {
         datasetId: datasetId,
       };
 
-      const response = await HttpHandler.handleHttpCall(
+      const response = await HttpHandler.handleHttpCall<PBIResponse<Array<PBIRefresh>>>(
         AllowedApiPaths.DATASETS_IN_GROUP_REFRESHES,
         requestInit,
         pathParams,
@@ -671,7 +678,11 @@ export class PowerBiService {
         groupId: groupId,
       };
 
-      const response = await HttpHandler.handleHttpCall(AllowedApiPaths.DATASETS_IN_GROUP, requestInit, pathParams);
+      const response = await HttpHandler.handleHttpCall<PBIResponse<Array<Record<string, any>>>>(
+        AllowedApiPaths.DATASETS_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
 
       return response.value;
     } else {
@@ -741,7 +752,8 @@ export class PowerBiService {
 
   public async importInGroup(
     groupId: string,
-    file,
+    file: unknown,
+    parentFolderId: string,
     datasetName: string = `${Date.now()}`,
   ): Promise<Record<string, any>> {
     if (groupId) {
@@ -762,15 +774,15 @@ export class PowerBiService {
       };
       const queryParams: Record<string, any> = {
         datasetDisplayName: datasetName,
+        subfolderObjectId: parentFolderId,
       };
 
-      const response = await HttpHandler.handleHttpCall(
+      const response = await HttpHandler.handleHttpCall<Record<string, any>>(
         AllowedApiPaths.IMPORTS_IN_GROUP,
         requestInit,
         pathParams,
         queryParams,
       );
-      console.log(response);
       return response;
     } else {
       logger.error('Missing required param: "groupId"');
@@ -778,7 +790,7 @@ export class PowerBiService {
     }
   }
 
-  public async getImportInGroup(groupId: string, importId: string): Promise<Record<string, any>> {
+  public async getImportInGroup(groupId: string, importId: string): Promise<PBIImport> {
     if (groupId && importId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
 
@@ -787,7 +799,11 @@ export class PowerBiService {
         importId: importId,
       };
 
-      const response = await HttpHandler.handleHttpCall(AllowedApiPaths.IMPORT_IN_GROUP, requestInit, pathParams);
+      const response = await HttpHandler.handleHttpCall<PBIImport>(
+        AllowedApiPaths.IMPORT_IN_GROUP,
+        requestInit,
+        pathParams,
+      );
       console.log(response);
       if (response.importState === 'Failed') {
         throw new PowerBiError(PowerBiError.ERROR_MESSAGES.FAILED_IMPORT);
@@ -851,7 +867,10 @@ export class PowerBiService {
 
   public allRefreshesInFinalState(refreshes: Array<PBIRefresh>) {
     return refreshes
-      ? refreshes.filter((refresh) => REFRESH_FINAL_STATUSES.includes(refresh.status)).length === refreshes.length
+      ? refreshes.filter(
+          (refresh) =>
+            refresh.status !== PBIRefreshStatusEnum.Unknown && REFRESH_FINAL_STATUSES.includes(refresh.status),
+        ).length === refreshes.length
       : false;
   }
 
@@ -905,14 +924,13 @@ export class PowerBiService {
     }
   }
 
-  //TODO: switch to HttpRequest
   private assembleRequest(
-    method: AllowedMethodEnum,
+    method: keyof typeof AllowedMethodEnum,
     authorizationToken: string,
     body?: any,
     customHeaders?: Map<string, any>,
   ): RequestInit {
-    let finalHeaders = {
+    let finalHeaders: Record<string, string> = {
       Authorization: 'Bearer ' + authorizationToken,
       ...powerBiRestConfig.headers,
     };
@@ -931,7 +949,7 @@ export class PowerBiService {
   }
 
   private async handleToken(): Promise<string> {
-    const validToken: AzureAccessToken = await this._azureClient.generateValidToken(
+    const validToken: AzureAccessToken = await this._azurePbiClient.generateValidToken(
       powerBiRestConfig.authorizationToken as AzureAccessToken,
     );
     powerBiRestConfig.authorizationToken = validToken;
@@ -939,6 +957,18 @@ export class PowerBiService {
     return validToken.accessToken;
   }
 
+  /**
+   * Updates the credentials for a Power BI gateway datasource.
+   * This method makes sure that the semantic model can properly connect to the datasource using the provided credentials by updating them in the gateway settings.
+   *
+   * @param gatewayId - The unique identifier of the gateway
+   * @param datasourceId - The unique identifier of the datasource within the gateway
+   * @param dataToUpd - The credential details to update for the datasource
+   *
+   * @throws {PowerBiError} If gatewayId or datasourceId is missing or falsy
+   *
+   * @returns A promise that resolves when the datasource credentials have been successfully updated
+   */
   private async gatewayDatasourceUpdate(gatewayId: string, datasourceId: string, dataToUpd: PBICredentialDetails) {
     if (gatewayId && datasourceId) {
       const body = {
