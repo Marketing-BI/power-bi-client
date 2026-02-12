@@ -207,7 +207,7 @@ export class PowerBiService {
         logger.error('Dataset with name `%s` was not found in group `%s` after import', datasetName, pbiGroup.id);
         throw new PowerBiError(PowerBiError.ERROR_MESSAGES.RESOURCE_NOT_FOUND, {
           [PowerBiError.PARAM_NAMES.PARAMS]: `dataset with name ${datasetName} in group ${pbiGroup.id}`,
-        })
+        });
       }
 
       //Take ownership
@@ -218,7 +218,7 @@ export class PowerBiService {
       // update datasource credentials
       const datasource = (await this.listDatasourcesInGroup(pbiGroup.id, datasetId))[0];
 
-      await this.gatewayDatasourceUpdate(datasource.gatewayId, datasource.datasourceId, config.datasourceCredentials);
+      // await this.gatewayDatasourceUpdate(datasource.gatewayId, datasource.datasourceId, config.datasourceCredentials);
       await this.datasetRefresh(pbiGroup.id, datasetId);
       let counter = 0;
       let refreshed: boolean;
