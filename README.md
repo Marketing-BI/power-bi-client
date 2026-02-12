@@ -102,6 +102,17 @@ Other branches contain individual features in development.
 
 ## 🪵 Change log
 
+### v2.1.0
+
+#### Changes
+
+- Exposed methods
+  - listDatasourcesInGroup
+  - datasetUpdateParameters
+  - gatewayDatasourceUpdate
+
+Do not automatically trigger `gatewayDatasourceUpdate` when importing PBIX to PBI
+
 ### v2.0.0
 
 #### Breaking changes
