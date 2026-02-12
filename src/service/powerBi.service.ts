@@ -218,6 +218,8 @@ export class PowerBiService {
       // update datasource credentials
       const datasource = (await this.listDatasourcesInGroup(pbiGroup.id, datasetId))[0];
 
+      // Do not update datasource credentials
+      // it just needs to be specified once
       // await this.gatewayDatasourceUpdate(datasource.gatewayId, datasource.datasourceId, config.datasourceCredentials);
       await this.datasetRefresh(pbiGroup.id, datasetId);
       let counter = 0;
@@ -969,7 +971,7 @@ export class PowerBiService {
    *
    * @returns A promise that resolves when the datasource credentials have been successfully updated
    */
-  private async gatewayDatasourceUpdate(gatewayId: string, datasourceId: string, dataToUpd: PBICredentialDetails) {
+  public async gatewayDatasourceUpdate(gatewayId: string, datasourceId: string, dataToUpd: PBICredentialDetails) {
     if (gatewayId && datasourceId) {
       const body = {
         credentialDetails: dataToUpd,

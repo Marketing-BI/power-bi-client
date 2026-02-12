@@ -1,6 +1,7 @@
 import type {
   DatasetRefreshInfo,
   GenerateTokenResponseType,
+  PBICredentialDetails,
   PBIDatasource,
   PBIRefresh,
   PowerBiConfig,
@@ -72,5 +73,13 @@ export class PowerBiClient {
 
   public async listDatasourcesInGroup(groupId: string, datasetId: string): Promise<Array<PBIDatasource>> {
     return this._powerBiService.listDatasourcesInGroup(groupId, datasetId);
+  }
+
+  public async gatewayDatasourceUpdate(
+    gatewayId: string,
+    datasourceId: string,
+    crendetialDetails: PBICredentialDetails,
+  ) {
+    return this._powerBiService.gatewayDatasourceUpdate(gatewayId, datasourceId, crendetialDetails);
   }
 }
