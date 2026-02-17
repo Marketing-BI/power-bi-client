@@ -1,6 +1,8 @@
 import type {
   DatasetRefreshInfo,
   GenerateTokenResponseType,
+  PBICredentialDetails,
+  PBIDatasource,
   PBIRefresh,
   PowerBiConfig,
   PowerBiConfigDto,
@@ -59,5 +61,25 @@ export class PowerBiClient {
     await this._powerBiService.datasetRefresh(groupId, datasetId);
 
     return this.getLastDatasetRefresh(groupId, datasetId);
+  }
+
+  public async datasetUpdateParameters(
+    groupId: string,
+    datasetId: string,
+    params: Array<Record<string, any>>,
+  ): Promise<void> {
+    return this._powerBiService.datasetUpdateParameters(groupId, datasetId, params);
+  }
+
+  public async listDatasourcesInGroup(groupId: string, datasetId: string): Promise<Array<PBIDatasource>> {
+    return this._powerBiService.listDatasourcesInGroup(groupId, datasetId);
+  }
+
+  public async gatewayDatasourceUpdate(
+    gatewayId: string,
+    datasourceId: string,
+    crendetialDetails: PBICredentialDetails,
+  ) {
+    return this._powerBiService.gatewayDatasourceUpdate(gatewayId, datasourceId, crendetialDetails);
   }
 }
