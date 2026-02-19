@@ -1,7 +1,7 @@
 import FormData from 'form-data';
 import { RequestInit } from 'node-fetch';
 
-import { PowerBiConfigDto, PowerBiError } from './index';
+import { FabricService, PowerBiConfigDto, PowerBiError } from './index';
 import type {
   PBICapacity,
   PBICreateDataSourceRequest,
@@ -17,7 +17,7 @@ import type {
 } from './powerBI.interfaces';
 
 import { logger } from '../configuration';
-import { PowerBiClient } from '../connectors/azure';
+import { FabricClient, PowerBiClient } from '../connectors/azure';
 import { AzureAccessToken } from '../connectors/azure/dto/AzureAccessToken';
 import { HttpHandler } from '../httpHandler/HttpHandler';
 import type {
@@ -101,9 +101,11 @@ const GROUP_PREFIX: string = process.env.POWER_BI_GROUP_PREFIX ? process.env.POW
 // Add logs and result store
 export class PowerBiService {
   private readonly _azurePbiClient: PowerBiClient;
+  private readonly _fabricService: FabricService;
 
-  constructor(pbiClient: PowerBiClient) {
+  constructor(pbiClient: PowerBiClient, fabricClient: FabricClient) {
     this._azurePbiClient = pbiClient;
+    this._fabricService = new FabricService(fabricClient);
   }
 
   private static reportPageConvertor(page: PBIReportPage): ReportPageType {
@@ -201,7 +203,7 @@ export class PowerBiService {
         await new Promise((r) => setTimeout(r, 2000));
         importData = await this.getImportInGroup(pbiGroup.id, importData.id);
       } while (importData.importState === 'Publishing');
-      const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id);
+      const datasets: Array<Record<string, any>> = await this.getGroupDatasets(pbiGroup.id, config.importFolderId);
       const datasetId: string = datasets.find((dataset) => dataset.name === datasetName)?.id;
       if (!datasetId) {
         logger.error('Dataset with name `%s` was not found in group `%s` after import', datasetName, pbiGroup.id);
@@ -672,7 +674,7 @@ export class PowerBiService {
     }
   }
 
-  public async getGroupDatasets(groupId: string): Promise<Array<Record<string, any>>> {
+  public async getGroupDatasets(groupId: string, folderId: string): Promise<Array<Record<string, any>>> {
     if (groupId) {
       const requestInit: RequestInit = this.assembleRequest(AllowedMethodEnum.GET, await this.handleToken());
 
@@ -686,7 +688,11 @@ export class PowerBiService {
         pathParams,
       );
 
-      return response.value;
+      const items = await this._fabricService.listFolderItems(groupId, folderId);
+      const folderDatasets = items.filter((item) => item.type === 'SemanticModel');
+      return response.value.filter(
+        (dataset) => dataset.id === folderDatasets.find((fd) => fd.displayName === dataset.name)?.id,
+      );
     } else {
       logger.error('Missing required param: "groupId"');
       throw new PowerBiError(PowerBiError.ERROR_MESSAGES.MISSING_REQUIRED_PARAM, { '%PARAMS%': '[groupId]' });

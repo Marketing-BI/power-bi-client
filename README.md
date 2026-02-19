@@ -102,6 +102,12 @@ Other branches contain individual features in development.
 
 ## 🪵 Change log
 
+### v2.1.1
+
+#### Fixes
+
+- Fix get dataset in group using folder path as well
+
 ### v2.1.0
 
 #### Changes
