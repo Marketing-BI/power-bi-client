@@ -7,18 +7,20 @@ import type {
   PowerBiConfig,
   PowerBiConfigDto,
 } from './types';
-import { PowerBiClient as PBClient } from './connectors/azure';
+import { FabricClient, PowerBiClient as PBClient } from './connectors/azure';
 import { PowerBiService } from './service';
 import type { PBIClientInitResultType } from './service/interfaces.pbi';
 import { PBIRefreshStatusEnum } from './service/enums';
 
 export class PowerBiClient {
   private readonly _powerBiAuthClient: PBClient;
+  private readonly _fabricClient: FabricClient;
   private readonly _powerBiService: PowerBiService;
 
   constructor(configuration: PowerBiConfig) {
     this._powerBiAuthClient = new PBClient(configuration.azureConfig);
-    this._powerBiService = new PowerBiService(this._powerBiAuthClient);
+    this._fabricClient = new FabricClient(configuration.azureConfig);
+    this._powerBiService = new PowerBiService(this._powerBiAuthClient, this._fabricClient);
   }
 
   public async initProjectFromTemplate(config: PowerBiConfigDto): Promise<PBIClientInitResultType> {

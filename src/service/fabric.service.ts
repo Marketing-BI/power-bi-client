@@ -49,6 +49,7 @@ const AllowedApiPaths = {
   WORKSPACE: fabricRestConfig.url + '/workspaces/:workspaceId',
   WORKSPACE_FOLDERS: fabricRestConfig.url + '/workspaces/:workspaceId/folders',
   WORKSPACE_FOLDER: fabricRestConfig.url + '/workspaces/:workspaceId/folders/:folderId',
+  FOLDER_ITEMS: fabricRestConfig.url + '/workspaces/:workspaceId/items/',
 };
 
 /**
@@ -171,6 +172,48 @@ export class FabricService {
       return folder;
     } catch (error: any) {
       logger.error('Error creating folder: %s', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * List all items inside a specific folder in a Power BI group.
+   * @param groupId The Power BI group ID
+   * @param folderId The folder ID
+   * @returns Array of folder items
+   */
+  public async listFolderItems(groupId: string, folderId: string): Promise<Array<Record<string, unknown>>> {
+    logger.info('Listing items in folder %s for group: %s', folderId, groupId);
+
+    try {
+      let continuationToken: string = '';
+      const items: Array<Record<string, unknown>> = [];
+
+      do {
+        const response = await this.makeApiCall<
+          undefined,
+          { value?: Array<Record<string, unknown>>; continuationToken?: string }
+        >(
+          AllowedMethodEnum.GET,
+          AllowedApiPaths.FOLDER_ITEMS,
+          undefined,
+          {
+            workspaceId: groupId,
+          },
+          {
+            ...(continuationToken ? { continuationToken } : {}),
+            rootFolderId: folderId,
+          },
+        );
+
+        items.push(...(response?.value || []));
+        continuationToken = response?.continuationToken || '';
+      } while (continuationToken);
+
+      logger.info('Found %d items in folder %s', items.length, folderId);
+      return items;
+    } catch (error: any) {
+      logger.error('Error listing folder items: %s', error.message);
       throw error;
     }
   }
