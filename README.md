@@ -102,6 +102,16 @@ Other branches contain individual features in development.
 
 ## 🪵 Change log
 
+### v2.2.0
+
+#### Added
+
+##### FabricService
+
+- Remove workspace API call
+- Recursively delete folders
+- Remove single PBI item
+
 ### v2.1.1
 
 #### Fixes
