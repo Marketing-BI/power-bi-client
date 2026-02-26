@@ -78,3 +78,26 @@ export interface ListFolderResponse {
   continuationToken?: string;
   continuationUri?: string;
 }
+
+/**
+ * Represents a Fabric workspace item (e.g. Report, SemanticModel, Dashboard).
+ */
+export interface FabricItem {
+  id: string;
+  displayName: string;
+  type: string;
+  workspaceId: string;
+  folderId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Options for the deleteRecursive operation
+ */
+export interface DeleteRecursiveOptions {
+  /**
+   * Whether to delete the target folder itself after deleting all of its contents.
+   * @default false
+   */
+  deleteSelf?: boolean;
+}
