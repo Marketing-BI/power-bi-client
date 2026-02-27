@@ -12,8 +12,10 @@ import type {
   FabricWorkspace,
   CreateFolderRequest,
   FabricFolder,
+  FabricItem,
   ListFoldersRequest,
   ListFolderResponse,
+  DeleteRecursiveOptions,
 } from './interfaces.fabric';
 
 /**
@@ -50,6 +52,7 @@ const AllowedApiPaths = {
   WORKSPACE_FOLDERS: fabricRestConfig.url + '/workspaces/:workspaceId/folders',
   WORKSPACE_FOLDER: fabricRestConfig.url + '/workspaces/:workspaceId/folders/:folderId',
   FOLDER_ITEMS: fabricRestConfig.url + '/workspaces/:workspaceId/items/',
+  WORKSPACE_ITEM: fabricRestConfig.url + '/workspaces/:workspaceId/items/:itemId',
 };
 
 /**
@@ -182,17 +185,17 @@ export class FabricService {
    * @param folderId The folder ID
    * @returns Array of folder items
    */
-  public async listFolderItems(groupId: string, folderId: string): Promise<Array<Record<string, unknown>>> {
+  public async listFolderItems(groupId: string, folderId: string): Promise<Array<FabricItem>> {
     logger.info('Listing items in folder %s for group: %s', folderId, groupId);
 
     try {
       let continuationToken: string = '';
-      const items: Array<Record<string, unknown>> = [];
+      const items: Array<FabricItem> = [];
 
       do {
         const response = await this.makeApiCall<
           undefined,
-          { value?: Array<Record<string, unknown>>; continuationToken?: string }
+          { value?: Array<FabricItem>; continuationToken?: string }
         >(
           AllowedMethodEnum.GET,
           AllowedApiPaths.FOLDER_ITEMS,
@@ -214,6 +217,28 @@ export class FabricService {
       return items;
     } catch (error: any) {
       logger.error('Error listing folder items: %s', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a specific item (report, semantic model, etc.) from a workspace.
+   *
+   * @param workspaceId - The ID of the workspace
+   * @param itemId - The ID of the item to delete
+   */
+  public async deleteItem(workspaceId: string, itemId: string): Promise<void> {
+    logger.info('Deleting item %s from workspace: %s', itemId, workspaceId);
+
+    try {
+      await this.makeApiCall<void>(AllowedMethodEnum.DELETE, AllowedApiPaths.WORKSPACE_ITEM, undefined, {
+        workspaceId,
+        itemId,
+      });
+
+      logger.info('Item deleted successfully: %s', itemId);
+    } catch (error: any) {
+      logger.error('Error deleting item %s: %s', itemId, error.message);
       throw error;
     }
   }
@@ -331,6 +356,117 @@ export class FabricService {
   }
 
   /**
+   * Recursively deletes all contents of a folder identified by its path.
+   * Optionally deletes the folder itself after clearing its contents.
+   *
+   * The path is resolved by navigating the folder hierarchy (e.g. "Parent/Child/Target").
+   * If the folder is not found, the operation is a no-op.
+   * Child folders are deleted bottom-up (deepest first) so that each folder is empty before it is removed.
+   *
+   * @param workspaceId - The ID of the workspace
+   * @param folderPath - Slash-separated path to the target folder (e.g. "Reports/2024/Q1")
+   * @param options - Additional options controlling the delete behaviour
+   * @param options.deleteSelf - When `true`, the target folder itself is deleted after its contents are removed. Defaults to `false`.
+   */
+  public async deleteRecursive(
+    workspaceId: string,
+    folderPath: string,
+    options: DeleteRecursiveOptions = {},
+  ): Promise<void> {
+    const { deleteSelf = false } = options;
+    logger.info(
+      'Recursively deleting contents of folder path "%s" in workspace: %s (deleteSelf=%s)',
+      folderPath,
+      workspaceId,
+      deleteSelf,
+    );
+
+    const folderNames = folderPath.split('/').map((name) => name.trim());
+    const [rootFolderName, ...subFolders] = folderNames;
+
+    try {
+      // Resolve the root folder
+      const rootFolders = await this.listFolders(workspaceId);
+      const rootFolder = rootFolders.find((f) => f.displayName === rootFolderName && f.workspaceId === workspaceId);
+
+      if (!rootFolder) {
+        logger.info('Folder "%s" not found in workspace %s. Nothing to delete.', rootFolderName, workspaceId);
+        return;
+      }
+
+      // Navigate down the path to reach the target folder
+      let targetFolder: FabricFolder = rootFolder;
+
+      if (subFolders.length > 0) {
+        const allFolders = await this.listFolders(workspaceId, { recursive: true, rootFolderId: rootFolder.id });
+        let parentFolderId = rootFolder.id;
+
+        for (const subFolderName of subFolders) {
+          const subFolder = allFolders.find(
+            (f) =>
+              f.displayName === subFolderName && f.workspaceId === workspaceId && f.parentFolderId === parentFolderId,
+          );
+
+          if (!subFolder) {
+            logger.info('Folder "%s" not found at path "%s". Nothing to delete.', subFolderName, folderPath);
+            return;
+          }
+
+          parentFolderId = subFolder.id;
+          targetFolder = subFolder;
+        }
+      }
+
+      // Collect all descendant folders and delete bottom-up (deepest first)
+      const descendants = await this.listFolders(workspaceId, { recursive: true, rootFolderId: targetFolder.id });
+      const allNodes = [targetFolder, ...descendants];
+
+      const getDepth = (folder: FabricFolder): number => {
+        let depth = 0;
+        let current: FabricFolder | undefined = folder;
+        while (current?.parentFolderId) {
+          const parent = allNodes.find((f) => f.id === current!.parentFolderId);
+          if (!parent) break;
+          depth++;
+          current = parent;
+        }
+        return depth;
+      };
+
+      // Sort deepest-first so each folder is empty before we delete it
+      const foldersToEmpty = [...descendants].sort((a, b) => getDepth(b) - getDepth(a));
+
+      // Also empty the target folder itself
+      foldersToEmpty.push(targetFolder);
+
+      for (const folder of foldersToEmpty) {
+        // Delete all items inside the folder first
+        const items = await this.listFolderItems(workspaceId, folder.id);
+        for (const item of items) {
+          logger.info('Deleting item "%s" (type: %s, id: %s) from folder %s', item.displayName, item.type, item.id, folder.id);
+          await this.deleteItem(workspaceId, item.id);
+        }
+
+        // Delete the (now-empty) folder unless it's the target and deleteSelf is false
+        const isTargetFolder = folder.id === targetFolder.id;
+        if (!isTargetFolder) {
+          await this.deleteFolder(workspaceId, folder.id);
+        }
+      }
+
+      if (deleteSelf) {
+        await this.deleteFolder(workspaceId, targetFolder.id);
+        logger.info('Folder "%s" (id: %s) deleted.', folderPath, targetFolder.id);
+      } else {
+        logger.info('Contents of folder "%s" deleted. Folder itself was kept.', folderPath);
+      }
+    } catch (error: any) {
+      logger.error('Error during deleteRecursive for path "%s": %s', folderPath, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Delete a folder from a workspace
    * @param workspaceId The workspace ID
    * @param folderId The folder ID
@@ -347,6 +483,24 @@ export class FabricService {
       logger.info('Folder deleted successfully: %s', folderId);
     } catch (error: any) {
       logger.error('Error deleting folder: %s', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a workspace.
+   *
+   * @param workspaceId - The ID of the workspace to delete
+   */
+  public async deleteWorkspace(workspaceId: string): Promise<void> {
+    logger.info('Deleting workspace: %s', workspaceId);
+
+    try {
+      await this.makeApiCall<void>(AllowedMethodEnum.DELETE, AllowedApiPaths.WORKSPACE, undefined, { workspaceId });
+
+      logger.info('Workspace deleted successfully: %s', workspaceId);
+    } catch (error: any) {
+      logger.error('Error deleting workspace %s: %s', workspaceId, error.message);
       throw error;
     }
   }
